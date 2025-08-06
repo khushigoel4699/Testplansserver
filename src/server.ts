@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import { AzureDevOpsTestPlansClient } from './AzureDevOpsTestPlansClient';
+import { AzureOpenAIService, TestPlanRecommendation } from './AzureOpenAIService';
 import * as dotenv from 'dotenv';
 
 // Load environment variables
@@ -437,6 +438,98 @@ app.get('/api/builds/:buildId/testresults', ensureClientInitialized, async (req:
         });
     } catch (error) {
         next(error);
+    }
+});
+
+// POST /api/testplans/recommendations - Generate test plan recommendations based on PRD
+app.post('/api/testplans/recommendations', ensureClientInitialized, async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { prd, testPlanId } = req.body;
+        
+        // Validate required fields
+        if (!prd) {
+            return res.status(400).json({
+                success: false,
+                error: 'PRD (Product Requirements Document) is required'
+            });
+        }
+        
+        // Use testPlanId from request body or fallback to environment variable
+        const planId = testPlanId || process.env.TEST_PLAN_ID;
+        if (!planId) {
+            return res.status(400).json({
+                success: false,
+                error: 'Test Plan ID is required either in request body or TEST_PLAN_ID environment variable'
+            });
+        }
+        
+        console.log(`Generating recommendations for test plan ${planId} with PRD length: ${prd.length} characters`);
+        
+        // Fetch existing test plans from Azure DevOps
+        let existingTestPlans: any[] = [];
+        try {
+            // Get test plan details
+            const testPlanResponse = await adoClient!.getTestPlan(planId);
+            
+            // Get test cases from the test plan
+            if (testPlanResponse && testPlanResponse.rootSuite?.id) {
+                const testCasesResponse = await adoClient!.getTestCaseList(planId, testPlanResponse.rootSuite.id);
+                existingTestPlans = testCasesResponse || [];
+            }
+            
+            console.log(`Found ${existingTestPlans.length} existing test cases in test plan ${planId}`);
+        } catch (adoError) {
+            console.warn('Could not fetch existing test plans from Azure DevOps:', adoError);
+            // Continue with empty existing plans - this allows the API to work even if ADO fetch fails
+        }
+        
+        // Initialize Azure OpenAI service
+        const openAIService = new AzureOpenAIService();
+        
+        // Generate recommendations using Azure OpenAI
+        const recommendations = await openAIService.generateTestPlanRecommendations(
+            prd,
+            existingTestPlans,
+            planId
+        );
+        
+        console.log(`Generated ${recommendations.length} test plan recommendations`);
+        
+        res.json({
+            success: true,
+            data: {
+                testPlanId: planId,
+                prdLength: prd.length,
+                existingTestCasesCount: existingTestPlans.length,
+                recommendations,
+                generatedAt: new Date().toISOString()
+            }
+        });
+        
+    } catch (error: any) {
+        console.error('Error generating test plan recommendations:', error);
+        
+        // Provide more specific error messages
+        let errorMessage = 'Failed to generate test plan recommendations';
+        let statusCode = 500;
+        
+        if (error.message?.includes('Azure OpenAI configuration missing')) {
+            errorMessage = 'Azure OpenAI service is not properly configured';
+            statusCode = 503;
+        } else if (error.message?.includes('Failed to generate recommendations')) {
+            errorMessage = error.message;
+            statusCode = 502;
+        } else if (error.message?.includes('Failed to parse recommendations')) {
+            errorMessage = 'Azure OpenAI returned invalid response format';
+            statusCode = 502;
+        }
+        
+        res.status(statusCode).json({
+            success: false,
+            error: errorMessage,
+            details: error.message,
+            timestamp: new Date().toISOString()
+        });
     }
 });
 

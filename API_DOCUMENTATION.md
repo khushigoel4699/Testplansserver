@@ -197,6 +197,82 @@ curl -X POST "http://localhost:3000/api/testplans" \
 }
 ```
 
+### Generate Test Plan Recommendations
+
+#### `POST /api/testplans/recommendations`
+
+**Description:** Generate AI-powered test plan recommendations based on a Product Requirements Document (PRD) using Azure OpenAI.
+
+**Request Body:**
+```json
+{
+  "prd": "Product Requirements Document content...",
+  "testPlanId": "optional-test-plan-id"
+}
+```
+
+**Required Fields:**
+- `prd` (string) - Product Requirements Document content
+
+**Optional Fields:**
+- `testPlanId` (string) - Test Plan ID to analyze existing test cases (uses TEST_PLAN_ID from environment if not provided)
+
+**Example:**
+```bash
+curl -X POST "http://localhost:3000/api/testplans/recommendations" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prd": "We are building a user authentication system with login, registration, password reset, and multi-factor authentication features. Users should be able to register with email, verify their account, login securely, and reset passwords. The system must support 2FA via SMS and authenticator apps.",
+    "testPlanId": "2541627"
+  }'
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "testPlanId": "2541627",
+    "prdLength": 285,
+    "existingTestCasesCount": 11,
+    "recommendations": [
+      {
+        "name": "User Authentication Core Flows",
+        "description": "Comprehensive testing of authentication workflows",
+        "objective": "Validate user registration, login, and password management functionality",
+        "testCases": [
+          {
+            "title": "User Registration with Email Verification",
+            "description": "Test complete user registration flow including email verification",
+            "steps": [
+              "Navigate to registration page",
+              "Fill in valid user details",
+              "Submit registration form",
+              "Check email for verification link",
+              "Click verification link"
+            ],
+            "expectedResult": "User account is created and verified successfully",
+            "priority": "Critical",
+            "testType": "Functional"
+          }
+        ],
+        "coverage": {
+          "functionalAreas": ["Authentication", "Email Verification"],
+          "riskAreas": ["Security", "User Experience"],
+          "userScenarios": ["New User Registration", "Account Activation"]
+        }
+      }
+    ],
+    "generatedAt": "2024-02-15T10:30:00.000Z"
+  }
+}
+```
+
+**Error Responses:**
+- `400` - Missing required PRD field or invalid testPlanId
+- `502` - Azure OpenAI service error or invalid response format  
+- `503` - Azure OpenAI service not configured
+
 ### Update Test Plan
 
 #### `PUT /api/testplans/:id`
