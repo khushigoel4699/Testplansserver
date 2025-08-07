@@ -88,45 +88,37 @@ export class AzureOpenAIService {
     }
     
     private buildSystemPrompt(): string {
-        return `You are an expert Test Manager and Quality Assurance professional with extensive experience in creating comprehensive test plans based on Product Requirements Documents (PRDs). Your task is to analyze PRDs and generate detailed, actionable test plan recommendations.
+        return `You are an intelligent QA assistant tasked with analyzing two inputs:
+A Product Requirements Document (PRD) – this contains detailed functional and non-functional requirements for a product or feature.
+An Azure DevOps (ADO) test plan – this includes existing test cases, usually structured into test suites, test cases, steps, and acceptance criteria.
+Your objective is to generate a list of recommended end-to-end (E2E) test scenarios that should be added to the test plan.
+ 
+Your Goals
+Identify E2E scenarios described in the PRD.
+Compare these with test coverage in the ADO test plan.
+Recommend E2E tests for any gaps—i.e., PRD scenarios not explicitly or implicitly covered in the ADO test plan.
+Instructions
+Extract and list all key user journeys, workflows, edge cases, or functional expectations from the PRD.
+Parse the ADO test plan to understand what scenarios are already covered.
+Compare the two inputs to detect missing tests.
+Generate a structured list of recommended E2E test scenarios to ensure full PRD coverage.
 
-Key Responsibilities:
-1. Analyze the provided PRD to understand the product functionality, user flows, and requirements
-2. Review existing test plans to understand current coverage (but do NOT duplicate them)
-3. Generate NEW, comprehensive test plans that complement existing testing
-4. Focus on areas that may be missing or need additional coverage
-5. Ensure test cases are specific, measurable, and actionable
-
-Guidelines:
-- Create test plans that are DIFFERENT from existing ones
-- Focus on edge cases, integration scenarios, and user experience flows
-- Prioritize test cases based on risk and business impact
-- Include various test types: Functional, Integration, Performance, Security, Usability
-- Provide clear, step-by-step test procedures
-- Ensure comprehensive coverage of the PRD requirements
-
-Response Format:
-Return a valid JSON array of test plan recommendations. Each recommendation should follow this exact structure:
-
+📤 Output Format
+Return your findings in the following JSON format:
+ 
 {
-  "name": "Test Plan Name",
-  "description": "Brief description of what this test plan covers",
-  "objective": "Clear objective of the test plan",
-  "testCases": [
+  "recommended_e2e_tests": [
     {
-      "title": "Test case title",
-      "description": "What this test case validates",
-      "steps": ["Step 1", "Step 2", "Step 3"],
-      "expectedResult": "Expected outcome",
-      "priority": "Critical|High|Medium|Low",
-      "testType": "Functional|Integration|Performance|Security|Usability|Regression"
+      "title": "<Descriptive scenario title>",
+      "prd_reference": "<Section or line in PRD that defines the requirement>",
+      "reason": "<Why this test is required>",
+      "missing_in_ado": true,
+      "steps": [
+        "<Step 1>",
+        "<Step 2>"
+      ]
     }
-  ],
-  "coverage": {
-    "functionalAreas": ["Area 1", "Area 2"],
-    "riskAreas": ["Risk 1", "Risk 2"],
-    "userScenarios": ["Scenario 1", "Scenario 2"]
-  }
+  ]
 }`;
     }
     
@@ -138,14 +130,7 @@ Return a valid JSON array of test plan recommendations. Each recommendation shou
         return `${existingPlansText}Product Requirements Document (PRD):
 ${prd}
 
-Please analyze the PRD and generate 2-3 comprehensive test plan recommendations that:
-1. Cover different aspects of the product requirements
-2. Are DISTINCT from any existing test plans
-3. Focus on critical user journeys and business scenarios
-4. Include proper test case prioritization
-5. Cover various testing types (functional, integration, performance, etc.)
-
-Generate test plans that would provide maximum value and coverage for this product. Return ONLY the JSON array without any additional text or markdown formatting.`;
+Please analyze the PRD and existing test plans to identify missing end-to-end test scenarios. Focus on critical user journeys and business workflows that are not covered by the existing tests.`;
     }
     
     private parseRecommendations(content: string): TestPlanRecommendation[] {
@@ -158,25 +143,45 @@ Generate test plans that would provide maximum value and coverage for this produ
             
             const parsed = JSON.parse(cleanContent);
             
-            // Validate the structure
-            if (!Array.isArray(parsed)) {
-                throw new Error('Response must be an array of test plan recommendations');
+            // Handle new format with recommended_e2e_tests
+            let e2eTests: any[] = [];
+            
+            if (parsed.recommended_e2e_tests && Array.isArray(parsed.recommended_e2e_tests)) {
+                e2eTests = parsed.recommended_e2e_tests;
+            } else if (Array.isArray(parsed)) {
+                // Fallback for old format
+                return parsed as TestPlanRecommendation[];
+            } else {
+                throw new Error('Response must contain recommended_e2e_tests array or be an array of test plan recommendations');
             }
             
-            // Validate each recommendation
-            parsed.forEach((rec, index) => {
-                if (!rec.name || !rec.description || !rec.objective || !Array.isArray(rec.testCases)) {
-                    throw new Error(`Invalid recommendation structure at index ${index}`);
+            // Convert new format to TestPlanRecommendation format
+            const recommendations: TestPlanRecommendation[] = e2eTests.map((test, index) => {
+                if (!test.title || !test.reason || !Array.isArray(test.steps)) {
+                    throw new Error(`Invalid E2E test structure at index ${index}`);
                 }
                 
-                rec.testCases.forEach((testCase: any, tcIndex: number) => {
-                    if (!testCase.title || !testCase.description || !Array.isArray(testCase.steps) || !testCase.expectedResult) {
-                        throw new Error(`Invalid test case structure at recommendation ${index}, test case ${tcIndex}`);
+                return {
+                    name: test.title,
+                    description: test.reason,
+                    objective: `Ensure ${test.title.toLowerCase()} works correctly as described in ${test.prd_reference || 'PRD'}`,
+                    testCases: [{
+                        title: test.title,
+                        description: test.reason,
+                        steps: test.steps,
+                        expectedResult: "All steps complete successfully and the workflow functions as expected",
+                        priority: 'High' as const,
+                        testType: 'Functional' as const
+                    }],
+                    coverage: {
+                        functionalAreas: [test.title.split(' ').slice(0, 2).join(' ')],
+                        riskAreas: ["User workflow", "Business process"],
+                        userScenarios: [test.title]
                     }
-                });
+                };
             });
             
-            return parsed as TestPlanRecommendation[];
+            return recommendations;
             
         } catch (error) {
             console.error('Error parsing recommendations:', error);

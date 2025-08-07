@@ -233,45 +233,111 @@ curl -X POST "http://localhost:3000/api/testplans/recommendations" \
   "success": true,
   "data": {
     "testPlanId": "2541627",
-    "prdLength": 285,
+    "prdLength": 8737,
     "existingTestCasesCount": 11,
     "recommendations": [
       {
-        "name": "User Authentication Core Flows",
-        "description": "Comprehensive testing of authentication workflows",
-        "objective": "Validate user registration, login, and password management functionality",
+        "name": "End-to-End: Create Workspace as New User",
+        "description": "No test case covers the full journey of signing in and creating a new workspace, which is a critical onboarding flow.",
+        "objective": "Ensure end-to-end: create workspace as new user works correctly as described in 2.1.1 Create Workspace; 3. UX Scenarios > Scenario 1",      
         "testCases": [
           {
-            "title": "User Registration with Email Verification",
-            "description": "Test complete user registration flow including email verification",
+            "title": "End-to-End: Create Workspace as New User",
+            "description": "No test case covers the full journey of signing in and creating a new workspace, which is a critical onboarding flow.",
             "steps": [
-              "Navigate to registration page",
-              "Fill in valid user details",
-              "Submit registration form",
-              "Check email for verification link",
-              "Click verification link"
+              "Sign in to the Playwright portal with an Azure account.",
+              "Verify the prompt to create a new workspace if none exists.",     
+              "Select '+ New workspace'.",
+              "Enter valid workspace name, subscription, and region.",
+              "Click 'Create workspace'.",
+              "Verify new workspace resource is created and user is redirected to the setup guide."
             ],
-            "expectedResult": "User account is created and verified successfully",
-            "priority": "Critical",
+            "expectedResult": "All steps complete successfully and the workflow functions as expected",
+            "priority": "High",
             "testType": "Functional"
           }
         ],
         "coverage": {
-          "functionalAreas": ["Authentication", "Email Verification"],
-          "riskAreas": ["Security", "User Experience"],
-          "userScenarios": ["New User Registration", "Account Activation"]
+          "functionalAreas": [
+            "End-to-End: Create"
+          ],
+          "riskAreas": [
+            "User workflow",
+            "Business process"
+          ],
+          "userScenarios": [
+            "End-to-End: Create Workspace as New User"
+          ]
         }
-      }
+      },
     ],
-    "generatedAt": "2024-02-15T10:30:00.000Z"
+    "generatedAt": "2025-08-07T07:28:14.574Z"
   }
 }
 ```
 
+**Response Field Details:**
+- `testPlanId` (string) - The ID of the test plan analyzed
+- `prdLength` (number) - Character count of the provided PRD
+- `existingTestCasesCount` (number) - Number of existing test cases found in the test plan
+- `recommendations` (array) - Array of test plan recommendation objects
+  - `name` (string) - Name of the recommendation group
+  - `description` (string) - Description of the recommendation group
+  - `objective` (string) - Testing objective for this group
+  - `testCases` (array) - Array of recommended test cases
+    - `priority` (string) - One of: `Critical`, `High`, `Medium`, `Low`
+    - `testType` (string) - One of: `Functional`, `Integration`, `Performance`, `Security`, `Usability`, `Regression`
+  - `coverage` (object) - Coverage analysis with functional areas, risk areas, and user scenarios
+- `generatedAt` (string) - ISO timestamp when recommendations were generated
+```
+
 **Error Responses:**
-- `400` - Missing required PRD field or invalid testPlanId
-- `502` - Azure OpenAI service error or invalid response format  
-- `503` - Azure OpenAI service not configured
+
+**400 Bad Request** - Missing or invalid required fields:
+```json
+{
+  "success": false,
+  "error": "PRD (Product Requirements Document) is required"
+}
+```
+
+**400 Bad Request** - Missing Test Plan ID:
+```json
+{
+  "success": false,
+  "error": "Test Plan ID is required either in request body or TEST_PLAN_ID environment variable"
+}
+```
+
+**502 Bad Gateway** - Azure OpenAI service error:
+```json
+{
+  "success": false,
+  "error": "Failed to generate test plan recommendations",
+  "details": "Technical error details from Azure OpenAI",
+  "timestamp": "2024-02-15T10:30:00.000Z"
+}
+```
+
+**502 Bad Gateway** - Invalid response format:
+```json
+{
+  "success": false,
+  "error": "Azure OpenAI returned invalid response format",
+  "details": "Failed to parse recommendations",
+  "timestamp": "2024-02-15T10:30:00.000Z"
+}
+```
+
+**503 Service Unavailable** - Azure OpenAI not configured:
+```json
+{
+  "success": false,
+  "error": "Azure OpenAI service is not properly configured",
+  "details": "Azure OpenAI configuration missing",
+  "timestamp": "2024-02-15T10:30:00.000Z"
+}
+```
 
 ### Update Test Plan
 
